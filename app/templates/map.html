@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fishing Map MVP</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    .controls { padding: 12px; border-bottom: 1px solid #ddd; }
+    .controls form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .map-wrap { padding: 8px; }
+    input, select, button { padding: 6px; }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <form method="get" action="/">
+      <label>Период
+        <select name="period">
+          <option value="24h" {% if period == '24h' %}selected{% endif %}>24ч</option>
+          <option value="7d" {% if period == '7d' %}selected{% endif %}>7д</option>
+          <option value="30d" {% if period == '30d' %}selected{% endif %}>30д</option>
+        </select>
+      </label>
+      <label>Поиск <input type="text" name="q" value="{{ q }}" /></label>
+      <label>Лимит <input type="number" name="limit" value="{{ limit }}" min="1" max="500" /></label>
+      <button type="submit">Применить</button>
+      <a href="/admin/posts">Админка</a>
+    </form>
+    <div>Постов на карте: {{ posts_count }}</div>
+  </div>
+  <div class="map-wrap">{{ map_html|safe }}</div>
+</body>
+</html>
