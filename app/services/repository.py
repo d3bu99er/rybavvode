@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, exists, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Post, PostAttachment, Source, Topic
@@ -252,35 +252,68 @@ def topics_for_map(
     q: str | None,
     limit: int,
     min_geo_confidence: float,
-    posts_per_topic: int = 10,
 ):
+    post_exists_stmt = select(Post.id).where(Post.topic_id == Topic.id, Post.is_deleted.is_(False))
+    if since:
+        post_exists_stmt = post_exists_stmt.where(Post.posted_at_utc >= since)
+    if q:
+        like = f"%{q}%"
+        post_exists_stmt = post_exists_stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like)))
+
     topic_stmt: Select = (
         select(Topic)
         .where(Topic.geocoded_lat.is_not(None), Topic.geocoded_lon.is_not(None))
         .where(func.coalesce(Topic.geocode_confidence, 0.0) >= min_geo_confidence)
+        .where(exists(post_exists_stmt))
         .order_by(Topic.last_seen_at.desc())
     )
     if q:
         like = f"%{q}%"
         topic_stmt = topic_stmt.where(or_(Topic.title.ilike(like), Topic.place_name.ilike(like)))
-    topics = db.execute(topic_stmt.limit(limit)).scalars().all()
+    return db.execute(topic_stmt.limit(limit)).scalars().all()
 
-    result: list[tuple[Topic, list[Post]]] = []
-    for topic in topics:
-        posts_stmt: Select = (
-            select(Post)
-            .options(joinedload(Post.attachments))
-            .where(Post.topic_id == topic.id, Post.is_deleted.is_(False))
-            .order_by(Post.posted_at_utc.desc())
-            .limit(posts_per_topic)
-        )
-        if since:
-            posts_stmt = posts_stmt.where(Post.posted_at_utc >= since)
-        if q:
-            like = f"%{q}%"
-            posts_stmt = posts_stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like)))
 
-        posts = db.execute(posts_stmt).scalars().unique().all()
-        if posts:
-            result.append((topic, posts))
-    return result
+def topic_posts_paginated(
+    db: Session,
+    topic_id: int,
+    page: int = 1,
+    per_page: int = 15,
+    include_deleted: bool = False,
+):
+    base_stmt: Select = select(Post).where(Post.topic_id == topic_id)
+    if not include_deleted:
+        base_stmt = base_stmt.where(Post.is_deleted.is_(False))
+
+    total = db.execute(select(func.count()).select_from(base_stmt.subquery())).scalar_one()
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
+    offset = (page - 1) * per_page
+    items_stmt = (
+        base_stmt.options(joinedload(Post.attachments))
+        .order_by(Post.posted_at_utc.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+    items = db.execute(items_stmt).scalars().unique().all()
+    return items, total
+
+
+def count_posts_for_map(
+    db: Session,
+    since: datetime | None,
+    q: str | None,
+    min_geo_confidence: float,
+) -> int:
+    stmt: Select = (
+        select(func.count(Post.id))
+        .join(Post.topic)
+        .where(Post.is_deleted.is_(False))
+        .where(Topic.geocoded_lat.is_not(None), Topic.geocoded_lon.is_not(None))
+        .where(func.coalesce(Topic.geocode_confidence, 0.0) >= min_geo_confidence)
+    )
+    if since:
+        stmt = stmt.where(Post.posted_at_utc >= since)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like), Topic.title.ilike(like)))
+    return int(db.execute(stmt).scalar_one())

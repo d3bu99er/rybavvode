@@ -9,7 +9,14 @@ from app.config import get_settings
 from app.database import get_db
 from app.schemas import PostOut, TopicOut
 from app.services.map_service import build_map, parse_period
-from app.services.repository import get_post, get_topic, list_posts, topics_for_map
+from app.services.repository import (
+    count_posts_for_map,
+    get_post,
+    get_topic,
+    list_posts,
+    topic_posts_paginated,
+    topics_for_map,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -57,6 +64,40 @@ def api_topic(topic_id: int, db: Session = Depends(get_db)):
     return topic
 
 
+@router.get("/api/topics/{topic_id}/messages")
+def api_topic_messages(
+    topic_id: int,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=15, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    topic = get_topic(db, topic_id)
+    if not topic:
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    posts, total = topic_posts_paginated(db, topic_id=topic_id, page=page, per_page=per_page, include_deleted=False)
+    total_pages = (total + per_page - 1) // per_page if total else 1
+    items = []
+    for post in posts:
+        images = [f"/media/attachments/{a.local_rel_path}" for a in post.attachments if a.is_image and a.local_rel_path]
+        items.append(
+            {
+                "id": post.id,
+                "author": post.author,
+                "posted_at_local": post.posted_at_utc.strftime("%d-%m-%Y %H:%M"),
+                "content_text": post.content_text or "",
+                "images": images,
+            }
+        )
+    return {
+        "topic_id": topic_id,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "items": items,
+    }
+
+
 @router.get("/")
 def home(
     request: Request,
@@ -67,16 +108,20 @@ def home(
 ):
     settings = get_settings()
     since = parse_period(period)
-    topic_rows = topics_for_map(
+    topics = topics_for_map(
         db,
         since=since,
         q=q,
         limit=limit,
         min_geo_confidence=settings.min_geo_confidence,
-        posts_per_topic=10,
     )
-    map_html = build_map(topic_rows)
-    posts_count = sum(len(posts) for _, posts in topic_rows)
+    posts_count = count_posts_for_map(
+        db,
+        since=since,
+        q=q,
+        min_geo_confidence=settings.min_geo_confidence,
+    )
+    map_html = build_map(topics)
     return templates.TemplateResponse(
         "map.html",
         {
@@ -85,7 +130,7 @@ def home(
             "period": period,
             "q": q or "",
             "limit": limit,
+            "topics_count": len(topics),
             "posts_count": posts_count,
-            "topics_count": len(topic_rows),
         },
     )
