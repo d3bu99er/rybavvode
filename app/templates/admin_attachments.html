@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin attachments</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    .status-ok { color: #1d7f2f; font-weight: bold; }
+    .status-missing { color: #b42318; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>Вложения</h2>
+  <p><a href="/">Карта</a> | <a href="/admin/posts">Посты</a> | <a href="/admin/topics">Координаты</a> | <a href="/admin/logout">Выход</a></p>
+  <form method="get" action="/admin/attachments">
+    <label>Поиск <input type="text" name="q" value="{{ q }}" /></label>
+    <label><input type="checkbox" name="only_missing" value="true" {% if only_missing %}checked{% endif %}/> Только не скачанные</label>
+    <button type="submit">Фильтр</button>
+  </form>
+  <table>
+    <thead>
+      <tr>
+        <th>Attachment ID</th>
+        <th>Post ID</th>
+        <th>Топик</th>
+        <th>Файл</th>
+        <th>Тип</th>
+        <th>Статус</th>
+        <th>Действие</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in rows %}
+      <tr>
+        <td>{{ a.id }}</td>
+        <td>{{ a.post_id }}</td>
+        <td>{{ a.post.topic.title }}</td>
+        <td>{{ a.file_name }}</td>
+        <td>{% if a.is_image %}image{% else %}file{% endif %}</td>
+        <td>
+          {% if a.local_rel_path %}
+          <span class="status-ok">Скачано</span>
+          {% else %}
+          <span class="status-missing">Не скачано</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/admin/posts/{{ a.post_id }}/attachments/retry">
+            <button type="submit">Повторить загрузку поста</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin import router as admin_router
@@ -17,6 +19,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 app = FastAPI(title="Fishing Map MVP")
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, https_only=False, same_site="lax")
+Path(settings.attachments_dir).mkdir(parents=True, exist_ok=True)
+app.mount("/media/attachments", StaticFiles(directory=settings.attachments_dir), name="attachments")
 
 app.include_router(public_router)
 app.include_router(admin_router)

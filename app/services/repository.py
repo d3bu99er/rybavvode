@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Post, Source, Topic
+from app.models import Post, PostAttachment, Source, Topic
 
 
 def get_or_create_source(db: Session, name: str, base_url: str) -> Source:
@@ -67,6 +67,83 @@ def upsert_post(
     db.add(post)
     db.flush()
     return post
+
+
+def upsert_post_attachment(
+    db: Session,
+    post_id: int,
+    source_url: str,
+    file_name: str,
+    is_image: bool,
+    local_rel_path: str | None = None,
+    mime_type: str | None = None,
+    size_bytes: int | None = None,
+) -> PostAttachment:
+    attachment = db.execute(
+        select(PostAttachment).where(and_(PostAttachment.post_id == post_id, PostAttachment.source_url == source_url))
+    ).scalar_one_or_none()
+    if attachment:
+        attachment.file_name = file_name
+        attachment.is_image = is_image
+        if local_rel_path is not None:
+            attachment.local_rel_path = local_rel_path
+        if mime_type is not None:
+            attachment.mime_type = mime_type
+        if size_bytes is not None:
+            attachment.size_bytes = size_bytes
+        db.flush()
+        return attachment
+
+    attachment = PostAttachment(
+        post_id=post_id,
+        source_url=source_url,
+        file_name=file_name,
+        is_image=is_image,
+        local_rel_path=local_rel_path,
+        mime_type=mime_type,
+        size_bytes=size_bytes,
+    )
+    db.add(attachment)
+    db.flush()
+    return attachment
+
+
+def list_attachments(
+    db: Session,
+    q: str | None = None,
+    only_missing: bool = False,
+    limit: int = 200,
+    offset: int = 0,
+):
+    stmt: Select = (
+        select(PostAttachment)
+        .join(PostAttachment.post)
+        .join(Post.topic)
+        .options(joinedload(PostAttachment.post).joinedload(Post.topic))
+        .order_by(Post.posted_at_utc.desc())
+    )
+    if only_missing:
+        stmt = stmt.where(PostAttachment.local_rel_path.is_(None))
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Post.author.ilike(like),
+                Post.content_text.ilike(like),
+                Topic.title.ilike(like),
+                PostAttachment.file_name.ilike(like),
+            )
+        )
+    return db.execute(stmt.limit(limit).offset(offset)).scalars().unique().all()
+
+
+def attachments_for_post(db: Session, post_id: int):
+    stmt: Select = (
+        select(PostAttachment)
+        .where(PostAttachment.post_id == post_id)
+        .order_by(PostAttachment.id.asc())
+    )
+    return db.execute(stmt).scalars().all()
 
 
 def list_posts(
@@ -192,6 +269,7 @@ def topics_for_map(
     for topic in topics:
         posts_stmt: Select = (
             select(Post)
+            .options(joinedload(Post.attachments))
             .where(Post.topic_id == topic.id, Post.is_deleted.is_(False))
             .order_by(Post.posted_at_utc.desc())
             .limit(posts_per_topic)
@@ -202,7 +280,7 @@ def topics_for_map(
             like = f"%{q}%"
             posts_stmt = posts_stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like)))
 
-        posts = db.execute(posts_stmt).scalars().all()
+        posts = db.execute(posts_stmt).scalars().unique().all()
         if posts:
             result.append((topic, posts))
     return result

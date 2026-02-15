@@ -5,10 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.security import SESSION_KEY, verify_admin_credentials
-from app.services.repository import list_posts, list_topics, restore_post, soft_delete_post, update_topic_coordinates
+from app.services.repository import (
+    get_post,
+    list_attachments,
+    list_posts,
+    list_topics,
+    restore_post,
+    soft_delete_post,
+    update_topic_coordinates,
+)
+from app.services.sync_service import SyncService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
+sync_service = SyncService()
 
 
 def _is_auth(request: Request) -> bool:
@@ -86,6 +96,40 @@ def admin_topics(
             "q": q or "",
         },
     )
+
+
+@router.get("/attachments")
+def admin_attachments(
+    request: Request,
+    q: str | None = None,
+    only_missing: bool = False,
+    limit: int = 300,
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    rows = list_attachments(db, q=q, only_missing=only_missing, limit=min(limit, 500), offset=0)
+    return templates.TemplateResponse(
+        "admin_attachments.html",
+        {
+            "request": request,
+            "rows": rows,
+            "q": q or "",
+            "only_missing": only_missing,
+        },
+    )
+
+
+@router.post("/posts/{post_id}/attachments/retry")
+async def retry_post_attachments_handler(post_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    post = get_post(db, post_id)
+    if not post:
+        return RedirectResponse(url="/admin/attachments", status_code=303)
+    await sync_service.retry_post_attachments(db, post, force=False)
+    db.commit()
+    return RedirectResponse(url="/admin/attachments", status_code=303)
 
 
 @router.post("/topics/{topic_id}/coords")

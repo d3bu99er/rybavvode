@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     requests_per_second: float = 1.5
     http_timeout_seconds: int = 20
     forum_session_cookie: str = ""
+    attachments_dir: str = "data/attachments"
+    download_attachments: bool = True
 
     geocoder_provider: str = "yandex"
     google_geocoding_api_key: str = ""

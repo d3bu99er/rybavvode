@@ -68,7 +68,9 @@ uvicorn app.main:app --reload
 - `POST /admin/login`
 - `GET /admin/posts`
 - `GET /admin/topics`
+- `GET /admin/attachments`
 - `POST /admin/topics/{id}/coords` (ручная правка координат)
+- `POST /admin/posts/{id}/attachments/retry` (повторная загрузка вложений поста)
 - `POST /admin/posts/{id}/delete`
 - `POST /admin/posts/{id}/restore`
 
@@ -84,6 +86,7 @@ pytest
 - `MAX_FORUM_PAGES`, `MAX_TOPIC_PAGES`, `FETCH_INTERVAL_SECONDS`
 - `MAX_CONCURRENCY`, `REQUESTS_PER_SECOND`, `HTTP_TIMEOUT_SECONDS`
 - `FORUM_SESSION_COOKIE` (опционально, если публичного доступа недостаточно)
+- `DOWNLOAD_ATTACHMENTS`, `ATTACHMENTS_DIR` (скачивание и локальный показ вложений из авторизованной сессии)
 - `GEOCODER_PROVIDER=google|yandex`
 - `GEOCODE_TTL_DAYS`, `MIN_GEO_CONFIDENCE`
 

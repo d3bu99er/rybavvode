@@ -28,10 +28,19 @@ def build_map(topic_rows: list[tuple[Topic, list[Post]]]) -> str:
         items: list[str] = []
         for post in posts:
             full_text = html.escape(post.content_text or "")
+            images: list[str] = []
+            for att in post.attachments:
+                if att.is_image and att.local_rel_path:
+                    src = f"/media/attachments/{att.local_rel_path}"
+                    images.append(
+                        f"<img src='{html.escape(src)}' alt='{html.escape(att.file_name)}' "
+                        "style='max-width:240px; display:block; margin-top:6px;'/>"
+                    )
             items.append(
                 "<li>"
                 f"<b>{html.escape(post.author)}</b> ({post.posted_at_utc.isoformat()})<br/>"
                 f"{full_text}"
+                f"{''.join(images)}"
                 "</li>"
             )
 

@@ -13,7 +13,7 @@
 </head>
 <body>
   <h2>Спарсенные посты</h2>
-  <p><a href="/">Карта</a> | <a href="/admin/topics">Координаты</a> | <a href="/admin/logout">Выход</a></p>
+  <p><a href="/">Карта</a> | <a href="/admin/topics">Координаты</a> | <a href="/admin/attachments">Вложения</a> | <a href="/admin/logout">Выход</a></p>
   <form method="get" action="/admin/posts">
     <label>Поиск <input type="text" name="q" value="{{ q }}" /></label>
     <label><input type="checkbox" name="include_deleted" value="true" {% if include_deleted %}checked{% endif %}/> Показать удаленные</label>

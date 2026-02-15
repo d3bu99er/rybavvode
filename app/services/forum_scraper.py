@@ -3,6 +3,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -29,6 +30,14 @@ class ScrapedPost:
     posted_at_utc: datetime
     content_text: str
     url: str
+    attachments: list["ScrapedAttachment"]
+
+
+@dataclass
+class ScrapedAttachment:
+    source_url: str
+    file_name: str
+    is_image: bool
 
 
 class ForumScraper:
@@ -113,6 +122,62 @@ class ForumScraper:
     def clean_text(text: str) -> str:
         return re.sub(r"\s+", " ", text).strip()
 
+    def extract_content_text(self, message) -> str:
+        content_tag = message.select_one("div.bbWrapper, article.message-body, div.message-content")
+        if not content_tag:
+            return ""
+        # Remove attachment metadata blocks from message text.
+        for node in content_tag.select(
+            ".attachment, .attachments, .message-attachments, .js-attachmentInfo, .bbCodeBlock--unfurl"
+        ):
+            node.decompose()
+        return self.clean_text(content_tag.get_text(" ", strip=True))
+
+    @staticmethod
+    def _is_image_filename(name: str) -> bool:
+        ext = Path(name.lower()).suffix
+        return ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+    def extract_attachments(self, message, page_url: str) -> list[ScrapedAttachment]:
+        seen: set[str] = set()
+        attachments: list[ScrapedAttachment] = []
+
+        for link in message.select("a[href*='/attachments/']"):
+            href = link.get("href")
+            if not href:
+                continue
+            source_url = self.normalize_url(page_url, href)
+            if source_url in seen:
+                continue
+            seen.add(source_url)
+            text_name = self.clean_text(link.get_text(" ", strip=True))
+            file_name = text_name or Path(urlparse(source_url).path).name or "attachment.bin"
+            attachments.append(
+                ScrapedAttachment(
+                    source_url=source_url,
+                    file_name=file_name,
+                    is_image=self._is_image_filename(file_name),
+                )
+            )
+
+        for img in message.select("img[src*='/attachments/']"):
+            src = img.get("src")
+            if not src:
+                continue
+            source_url = self.normalize_url(page_url, src)
+            if source_url in seen:
+                continue
+            seen.add(source_url)
+            file_name = Path(urlparse(source_url).path).name or "attachment.jpg"
+            attachments.append(
+                ScrapedAttachment(
+                    source_url=source_url,
+                    file_name=file_name,
+                    is_image=True,
+                )
+            )
+        return attachments
+
     @staticmethod
     def title_to_place_name(title: str) -> str:
         return ForumScraper.clean_text(title)
@@ -186,8 +251,7 @@ class ForumScraper:
                         dt_value = time_tag.get("datetime") or time_tag.get("title") or time_tag.get_text(" ", strip=True)
                     if not dt_value:
                         continue
-                    content_tag = message.select_one("div.bbWrapper, article.message-body, div.message-content")
-                    content_text = self.clean_text(content_tag.get_text(" ", strip=True)) if content_tag else ""
+                    content_text = self.extract_content_text(message)
                     permalink = message.select_one("a[href*='/posts/'], a.u-concealed")
                     if permalink and permalink.get("href"):
                         post_url = self.normalize_url(page_url, permalink.get("href"))
@@ -200,5 +264,6 @@ class ForumScraper:
                         posted_at_utc=self.parse_datetime_to_utc(dt_value),
                         content_text=content_text,
                         url=post_url,
+                        attachments=self.extract_attachments(message, page_url),
                     )
         return list(posts.values())
