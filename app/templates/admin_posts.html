@@ -13,10 +13,10 @@
 </head>
 <body>
   <h2>Спарсенные посты</h2>
-  <p><a href="/">Карта</a> | <a href="/admin/logout">Выход</a></p>
+  <p><a href="/">Карта</a> | <a href="/admin/topics">Координаты</a> | <a href="/admin/logout">Выход</a></p>
   <form method="get" action="/admin/posts">
     <label>Поиск <input type="text" name="q" value="{{ q }}" /></label>
-    <label><input type="checkbox" name="include_deleted" value="true" {% if include_deleted %}checked{% endif %}/> Показать удалённые</label>
+    <label><input type="checkbox" name="include_deleted" value="true" {% if include_deleted %}checked{% endif %}/> Показать удаленные</label>
     <button type="submit">Фильтр</button>
   </form>
   <table>
@@ -39,7 +39,7 @@
         <td>{{ p.posted_at_utc }}</td>
         <td>{{ p.author }}</td>
         <td>{{ p.topic.title }}</td>
-        <td>{% if p.is_deleted %}Удалён{% else %}Активен{% endif %}</td>
+        <td>{% if p.is_deleted %}Удален{% else %}Активен{% endif %}</td>
         <td>{{ p.content_text[:180] }}</td>
         <td><a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">Ссылка</a></td>
         <td>

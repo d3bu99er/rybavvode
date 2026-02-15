@@ -103,6 +103,34 @@ def get_topic(db: Session, topic_id: int) -> Topic | None:
     return db.execute(select(Topic).where(Topic.id == topic_id)).scalar_one_or_none()
 
 
+def list_topics(db: Session, q: str | None = None, limit: int = 200, offset: int = 0):
+    stmt: Select = select(Topic).order_by(Topic.last_seen_at.desc())
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(Topic.title.ilike(like), Topic.place_name.ilike(like)))
+    return db.execute(stmt.limit(limit).offset(offset)).scalars().all()
+
+
+def update_topic_coordinates(
+    db: Session,
+    topic_id: int,
+    lat: float,
+    lon: float,
+    confidence: float | None = None,
+    provider: str = "manual",
+) -> bool:
+    topic = get_topic(db, topic_id)
+    if not topic:
+        return False
+    topic.geocoded_lat = lat
+    topic.geocoded_lon = lon
+    topic.geocode_confidence = confidence
+    topic.geocode_provider = provider
+    topic.geocode_updated_at = datetime.now(UTC)
+    db.flush()
+    return True
+
+
 def soft_delete_post(db: Session, post_id: int) -> bool:
     post = get_post(db, post_id)
     if not post:

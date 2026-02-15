@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin topics</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    input { width: 120px; }
+  </style>
+</head>
+<body>
+  <h2>Топики и координаты</h2>
+  <p><a href="/">Карта</a> | <a href="/admin/posts">Посты</a> | <a href="/admin/logout">Выход</a></p>
+  <form method="get" action="/admin/topics">
+    <label>Поиск <input type="text" name="q" value="{{ q }}" /></label>
+    <button type="submit">Фильтр</button>
+  </form>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Топик</th>
+        <th>Place name</th>
+        <th>Текущие координаты</th>
+        <th>Источник</th>
+        <th>Confidence</th>
+        <th>Обновить вручную</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in topics %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td><a href="{{ t.url }}" target="_blank" rel="noopener noreferrer">{{ t.title }}</a></td>
+        <td>{{ t.place_name }}</td>
+        <td>{{ t.geocoded_lat }}, {{ t.geocoded_lon }}</td>
+        <td>{{ t.geocode_provider or "-" }}</td>
+        <td>{{ t.geocode_confidence if t.geocode_confidence is not none else "-" }}</td>
+        <td>
+          <form method="post" action="/admin/topics/{{ t.id }}/coords">
+            <input type="number" step="any" name="lat" value="{{ t.geocoded_lat if t.geocoded_lat is not none else '' }}" placeholder="lat" required />
+            <input type="number" step="any" name="lon" value="{{ t.geocoded_lon if t.geocoded_lon is not none else '' }}" placeholder="lon" required />
+            <input type="number" step="0.01" min="0" max="1" name="confidence" value="{{ t.geocode_confidence if t.geocode_confidence is not none else 1.0 }}" />
+            <button type="submit">Сохранить</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

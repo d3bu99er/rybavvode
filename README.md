@@ -67,6 +67,8 @@ uvicorn app.main:app --reload
 - `GET /admin/login`
 - `POST /admin/login`
 - `GET /admin/posts`
+- `GET /admin/topics`
+- `POST /admin/topics/{id}/coords` (ручная правка координат)
 - `POST /admin/posts/{id}/delete`
 - `POST /admin/posts/{id}/restore`
 

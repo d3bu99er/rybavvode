@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.security import SESSION_KEY, verify_admin_credentials
-from app.services.repository import list_posts, restore_post, soft_delete_post
+from app.services.repository import list_posts, list_topics, restore_post, soft_delete_post, update_topic_coordinates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -66,6 +66,45 @@ def admin_posts(
             "include_deleted": include_deleted,
         },
     )
+
+
+@router.get("/topics")
+def admin_topics(
+    request: Request,
+    q: str | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    topics = list_topics(db, q=q, limit=min(limit, 500), offset=0)
+    return templates.TemplateResponse(
+        "admin_topics.html",
+        {
+            "request": request,
+            "topics": topics,
+            "q": q or "",
+        },
+    )
+
+
+@router.post("/topics/{topic_id}/coords")
+def update_topic_coords_handler(
+    topic_id: int,
+    request: Request,
+    lat: float = Form(...),
+    lon: float = Form(...),
+    confidence: float = Form(1.0),
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+        return RedirectResponse(url="/admin/topics?error=invalid_coords", status_code=303)
+    conf = max(0.0, min(1.0, confidence))
+    if update_topic_coordinates(db, topic_id, lat=lat, lon=lon, confidence=conf, provider="manual"):
+        db.commit()
+    return RedirectResponse(url="/admin/topics", status_code=303)
 
 
 @router.post("/posts/{post_id}/delete")

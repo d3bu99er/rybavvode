@@ -1,0 +1,2 @@
+Перезапуск джобы скрапинга:
+docker compose exec app python -c "import asyncio; from app.main import scrape_job; asyncio.run(scrape_job())"
