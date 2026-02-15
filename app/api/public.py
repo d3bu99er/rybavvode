@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.schemas import PostOut, TopicOut
 from app.services.map_service import build_map, parse_period
-from app.services.repository import get_post, get_topic, list_posts, posts_for_map
+from app.services.repository import get_post, get_topic, list_posts, topics_for_map
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -67,8 +67,16 @@ def home(
 ):
     settings = get_settings()
     since = parse_period(period)
-    posts = posts_for_map(db, since=since, q=q, limit=limit, min_geo_confidence=settings.min_geo_confidence)
-    map_html = build_map(posts)
+    topic_rows = topics_for_map(
+        db,
+        since=since,
+        q=q,
+        limit=limit,
+        min_geo_confidence=settings.min_geo_confidence,
+        posts_per_topic=10,
+    )
+    map_html = build_map(topic_rows)
+    posts_count = sum(len(posts) for _, posts in topic_rows)
     return templates.TemplateResponse(
         "map.html",
         {
@@ -77,6 +85,7 @@ def home(
             "period": period,
             "q": q or "",
             "limit": limit,
-            "posts_count": len(posts),
+            "posts_count": posts_count,
+            "topics_count": len(topic_rows),
         },
     )

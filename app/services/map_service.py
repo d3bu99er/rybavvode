@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import folium
 
-from app.models import Post
+from app.models import Post, Topic
 
 
 def parse_period(period: str) -> datetime | None:
@@ -17,25 +17,33 @@ def parse_period(period: str) -> datetime | None:
     return None
 
 
-def build_map(posts: list[Post]) -> str:
-    if posts:
-        center = [posts[0].topic.geocoded_lat, posts[0].topic.geocoded_lon]
+def build_map(topic_rows: list[tuple[Topic, list[Post]]]) -> str:
+    if topic_rows:
+        center = [topic_rows[0][0].geocoded_lat, topic_rows[0][0].geocoded_lon]
     else:
         center = [55.751244, 37.618423]
+
     fmap = folium.Map(location=center, zoom_start=6, control_scale=True)
-    for post in posts:
-        topic = post.topic
-        preview = html.escape((post.content_text or "")[:200])
+    for topic, posts in topic_rows:
+        items: list[str] = []
+        for post in posts:
+            full_text = html.escape(post.content_text or "")
+            items.append(
+                "<li>"
+                f"<b>{html.escape(post.author)}</b> ({post.posted_at_utc.isoformat()})<br/>"
+                f"{full_text}"
+                "</li>"
+            )
+
         popup_html = (
             f"<b>{html.escape(topic.title)}</b><br/>"
-            f"Автор: {html.escape(post.author)}<br/>"
-            f"Дата: {post.posted_at_utc.isoformat()}<br/>"
-            f"{preview}<br/>"
-            f"<a href='{html.escape(post.url)}' target='_blank' rel='noopener noreferrer'>Открыть пост</a>"
+            f"<a href='{html.escape(topic.url)}' target='_blank' rel='noopener noreferrer'>Open topic</a><br/>"
+            f"Latest messages ({len(posts)}):"
+            f"<ol>{''.join(items)}</ol>"
         )
         folium.Marker(
             location=[topic.geocoded_lat, topic.geocoded_lon],
-            popup=folium.Popup(popup_html, max_width=420),
+            popup=folium.Popup(popup_html, max_width=580),
             tooltip=topic.place_name,
         ).add_to(fmap)
     return fmap._repr_html_()

@@ -167,3 +167,42 @@ def posts_for_map(db: Session, since: datetime | None, q: str | None, limit: int
         like = f"%{q}%"
         stmt = stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like), Topic.title.ilike(like)))
     return db.execute(stmt.limit(limit)).scalars().unique().all()
+
+
+def topics_for_map(
+    db: Session,
+    since: datetime | None,
+    q: str | None,
+    limit: int,
+    min_geo_confidence: float,
+    posts_per_topic: int = 10,
+):
+    topic_stmt: Select = (
+        select(Topic)
+        .where(Topic.geocoded_lat.is_not(None), Topic.geocoded_lon.is_not(None))
+        .where(func.coalesce(Topic.geocode_confidence, 0.0) >= min_geo_confidence)
+        .order_by(Topic.last_seen_at.desc())
+    )
+    if q:
+        like = f"%{q}%"
+        topic_stmt = topic_stmt.where(or_(Topic.title.ilike(like), Topic.place_name.ilike(like)))
+    topics = db.execute(topic_stmt.limit(limit)).scalars().all()
+
+    result: list[tuple[Topic, list[Post]]] = []
+    for topic in topics:
+        posts_stmt: Select = (
+            select(Post)
+            .where(Post.topic_id == topic.id, Post.is_deleted.is_(False))
+            .order_by(Post.posted_at_utc.desc())
+            .limit(posts_per_topic)
+        )
+        if since:
+            posts_stmt = posts_stmt.where(Post.posted_at_utc >= since)
+        if q:
+            like = f"%{q}%"
+            posts_stmt = posts_stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like)))
+
+        posts = db.execute(posts_stmt).scalars().all()
+        if posts:
+            result.append((topic, posts))
+    return result
