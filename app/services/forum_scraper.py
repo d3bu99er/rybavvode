@@ -236,6 +236,7 @@ class ForumScraper:
                     if not href:
                         continue
                     topic_url = self.normalize_url(page_url, href)
+                    topic_url = re.sub(r"/unread/?$", "/", topic_url)
                     if "/threads/" not in topic_url:
                         continue
                     title = self.clean_text(link.get_text(" ", strip=True))
