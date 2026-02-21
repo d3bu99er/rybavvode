@@ -38,10 +38,10 @@
         <td>{{ p.id }}</td>
         <td>{{ p.posted_at_utc }}</td>
         <td>{{ p.author }}</td>
-        <td>{{ p.topic.title }}</td>
+        <td><a href="{{ p.topic.url }}" target="_blank" rel="noopener noreferrer">{{ p.topic.title }}</a></td>
         <td>{% if p.is_deleted %}Удален{% else %}Активен{% endif %}</td>
         <td>{{ p.content_text[:180] }}</td>
-        <td><a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">Ссылка</a></td>
+        <td><a href="{{ p.original_url }}" target="_blank" rel="noopener noreferrer">Ссылка</a></td>
         <td>
           {% if p.is_deleted %}
           <form method="post" action="/admin/posts/{{ p.id }}/restore"><button type="submit">Restore</button></form>
@@ -55,3 +55,4 @@
   </table>
 </body>
 </html>
+

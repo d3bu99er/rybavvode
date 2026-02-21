@@ -1,9 +1,12 @@
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models import Post
 from app.security import SESSION_KEY, verify_admin_credentials
 from app.services.repository import (
     get_post,
@@ -23,6 +26,37 @@ sync_service = SyncService()
 
 def _is_auth(request: Request) -> bool:
     return bool(request.session.get(SESSION_KEY))
+
+
+def _posts_base_url(topic_url: str) -> str:
+    parsed_topic = urlparse(topic_url)
+    if not parsed_topic.scheme or not parsed_topic.netloc:
+        return ""
+    path = parsed_topic.path or "/"
+    if "/threads/" in path:
+        prefix = path.split("/threads/", maxsplit=1)[0]
+    else:
+        parts = [part for part in path.split("/") if part]
+        if "forums" in parts:
+            prefix = "/" + "/".join(parts[: parts.index("forums")])
+        else:
+            prefix = ""
+    prefix = prefix.rstrip("/")
+    if prefix:
+        return f"{parsed_topic.scheme}://{parsed_topic.netloc}{prefix}/"
+    return f"{parsed_topic.scheme}://{parsed_topic.netloc}/"
+
+
+def _original_post_url(post: Post) -> str:
+    if post.url and "/posts/" in urlparse(post.url).path:
+        return post.url
+    if post.external_id and post.external_id.isdigit():
+        base = _posts_base_url(post.topic.url)
+        if base:
+            return f"{base}posts/{post.external_id}/"
+    if post.url:
+        return post.url
+    return post.topic.url
 
 
 @router.get("/login")
@@ -67,6 +101,8 @@ def admin_posts(
         limit=min(limit, 500),
         offset=0,
     )
+    for post in posts:
+        post.original_url = _original_post_url(post)
     return templates.TemplateResponse(
         "admin_posts.html",
         {

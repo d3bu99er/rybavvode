@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Post, Topic
+from app.services.forum_auth import ForumAuthService
 from app.services.forum_scraper import ForumScraper
 from app.services.geocoding import GeocodingService, GoogleGeocoder, YandexGeocoder
 from app.services.repository import (
@@ -24,6 +25,17 @@ class SyncService:
     def __init__(self):
         settings = get_settings()
         self.settings = settings
+        self.user_agent = "FishingMapMVPBot/1.0 (+respect robots.txt and ToS)"
+        self.auth = ForumAuthService(
+            forum_root_url=settings.forum_root_url,
+            forum_login_url=settings.forum_login_url,
+            username=settings.forum_username,
+            password=settings.forum_password,
+            timeout_seconds=settings.http_timeout_seconds,
+            user_agent=self.user_agent,
+            fallback_cookie=settings.forum_session_cookie,
+            preferred_cookie_name=settings.forum_session_cookie_name,
+        )
         self.scraper = ForumScraper(
             forum_root_url=settings.forum_root_url,
             max_forum_pages=settings.max_forum_pages,
@@ -32,6 +44,7 @@ class SyncService:
             max_concurrency=settings.max_concurrency,
             requests_per_second=settings.requests_per_second,
             forum_session_cookie=settings.forum_session_cookie,
+            user_agent=self.user_agent,
         )
 
         provider = (
@@ -42,6 +55,11 @@ class SyncService:
         self.geocoding = GeocodingService(provider)
         self.attachments_dir = Path(settings.attachments_dir)
         self.attachments_dir.mkdir(parents=True, exist_ok=True)
+
+    async def _ensure_forum_cookie(self, force_refresh: bool = False) -> str:
+        cookie = await self.auth.ensure_cookie(force_refresh=force_refresh)
+        self.scraper.set_forum_session_cookie(cookie)
+        return cookie
 
     @staticmethod
     def _safe_file_name(file_name: str) -> str:
@@ -55,25 +73,43 @@ class SyncService:
         return sanitized or "attachment.bin"
 
     async def _download_attachment(self, source_url: str, local_abs_path: Path) -> tuple[str | None, int | None] | None:
-        if not self.settings.forum_session_cookie:
+        cookie = await self._ensure_forum_cookie(force_refresh=False)
+        if not cookie:
             return None
-        headers = {"User-Agent": "FishingMapMVPBot/1.0"}
-        headers["Cookie"] = self.settings.forum_session_cookie
-        try:
-            async with httpx.AsyncClient(
-                timeout=self.settings.http_timeout_seconds,
-                follow_redirects=True,
-                headers=headers,
-            ) as client:
-                resp = await client.get(source_url)
-                resp.raise_for_status()
-                data = resp.content
-                local_abs_path.parent.mkdir(parents=True, exist_ok=True)
-                local_abs_path.write_bytes(data)
-                return resp.headers.get("content-type"), len(data)
-        except Exception as exc:
-            logger.warning("Attachment download failed: %s (%s)", source_url, exc)
-            return None
+        for attempt in range(2):
+            headers = {"User-Agent": self.user_agent, "Cookie": cookie}
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.settings.http_timeout_seconds,
+                    follow_redirects=True,
+                    headers=headers,
+                ) as client:
+                    resp = await client.get(source_url)
+                    if resp.status_code in {401, 403} or ForumAuthService.is_login_redirect_url(str(resp.url)):
+                        if attempt == 0:
+                            cookie = await self._ensure_forum_cookie(force_refresh=True)
+                            if cookie:
+                                continue
+                        logger.warning(
+                            "Attachment download unauthorized: %s (status=%s, final_url=%s)",
+                            source_url,
+                            resp.status_code,
+                            resp.url,
+                        )
+                        return None
+                    resp.raise_for_status()
+                    data = resp.content
+                    local_abs_path.parent.mkdir(parents=True, exist_ok=True)
+                    local_abs_path.write_bytes(data)
+                    return resp.headers.get("content-type"), len(data)
+            except Exception as exc:
+                if attempt == 0:
+                    cookie = await self._ensure_forum_cookie(force_refresh=True)
+                    if cookie:
+                        continue
+                logger.warning("Attachment download failed: %s (%s)", source_url, exc)
+                return None
+        return None
 
     async def retry_post_attachments(self, db: Session, post: Post, force: bool = False) -> tuple[int, int]:
         downloaded = 0
@@ -103,6 +139,7 @@ class SyncService:
         return topic.geocode_updated_at < datetime.now(UTC) - ttl
 
     async def run(self, db: Session):
+        await self._ensure_forum_cookie(force_refresh=False)
         source = get_or_create_source(db, self.settings.forum_source_name, self.settings.forum_root_url)
         db.commit()
         topics = await self.scraper.fetch_topics()
@@ -134,7 +171,7 @@ class SyncService:
                         abs_path = self.attachments_dir / rel_path
                         mime_type = None
                         size_bytes = None
-                        if self.settings.download_attachments and self.settings.forum_session_cookie and not abs_path.exists():
+                        if self.settings.download_attachments and not abs_path.exists():
                             downloaded = await self._download_attachment(attachment.source_url, abs_path)
                             if downloaded:
                                 mime_type, size_bytes = downloaded

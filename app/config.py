@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     max_concurrency: int = 3
     requests_per_second: float = 1.5
     http_timeout_seconds: int = 20
+    forum_login_url: str = ""
+    forum_username: str = ""
+    forum_password: str = ""
+    forum_session_cookie_name: str = "xf_session"
     forum_session_cookie: str = ""
     attachments_dir: str = "data/attachments"
     download_attachments: bool = True

@@ -50,6 +50,7 @@ class ForumScraper:
         max_concurrency: int,
         requests_per_second: float,
         forum_session_cookie: str = "",
+        user_agent: str = "FishingMapMVPBot/1.0 (+respect robots.txt and ToS)",
     ):
         self.forum_root_url = forum_root_url
         self.max_forum_pages = max_forum_pages
@@ -57,9 +58,12 @@ class ForumScraper:
         self.timeout_seconds = timeout_seconds
         self.semaphore = asyncio.Semaphore(max(1, max_concurrency))
         self.sleep_seconds = 1.0 / max(0.1, requests_per_second)
-        self.user_agent = "FishingMapMVPBot/1.0 (+respect robots.txt and ToS)"
+        self.user_agent = user_agent
         self.forum_session_cookie = forum_session_cookie
         self._robot_parser: RobotFileParser | None = None
+
+    def set_forum_session_cookie(self, cookie: str) -> None:
+        self.forum_session_cookie = cookie
 
     def _headers(self) -> dict[str, str]:
         headers = {"User-Agent": self.user_agent}
@@ -103,6 +107,35 @@ class ForumScraper:
     @staticmethod
     def normalize_url(base: str, href: str) -> str:
         return urljoin(base, href)
+
+    def _posts_base_url(self, topic_url: str) -> str:
+        parsed_topic = urlparse(topic_url)
+        if not parsed_topic.scheme or not parsed_topic.netloc:
+            return ""
+        path = parsed_topic.path or "/"
+        if "/threads/" in path:
+            prefix = path.split("/threads/", maxsplit=1)[0]
+        else:
+            parts = [part for part in path.split("/") if part]
+            if "forums" in parts:
+                prefix = "/" + "/".join(parts[: parts.index("forums")])
+            else:
+                prefix = ""
+        prefix = prefix.rstrip("/")
+        if prefix:
+            return f"{parsed_topic.scheme}://{parsed_topic.netloc}{prefix}/"
+        return f"{parsed_topic.scheme}://{parsed_topic.netloc}/"
+
+    def build_post_url(self, topic_url: str, post_external_id: str, permalink_href: str | None) -> str:
+        if permalink_href:
+            permalink_url = self.normalize_url(topic_url, permalink_href)
+            if "/posts/" in urlparse(permalink_url).path:
+                return permalink_url
+        if post_external_id and post_external_id.isdigit():
+            posts_base = self._posts_base_url(topic_url)
+            if posts_base:
+                return f"{posts_base}posts/{post_external_id}/"
+        return f"{topic_url}#post-{post_external_id}"
 
     @staticmethod
     def extract_topic_external_id(url: str) -> str:
@@ -252,11 +285,9 @@ class ForumScraper:
                     if not dt_value:
                         continue
                     content_text = self.extract_content_text(message)
-                    permalink = message.select_one("a[href*='/posts/'], a.u-concealed")
-                    if permalink and permalink.get("href"):
-                        post_url = self.normalize_url(page_url, permalink.get("href"))
-                    else:
-                        post_url = f"{topic.url}#post-{post_external_id}"
+                    permalink = message.select_one("a[href*='/posts/']")
+                    permalink_href = permalink.get("href") if permalink else None
+                    post_url = self.build_post_url(topic.url, post_external_id, permalink_href)
                     posts[post_external_id] = ScrapedPost(
                         topic_external_id=topic.external_id,
                         external_id=post_external_id,
