@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     yandex_geocoder_api_key: str = ""
     geocode_ttl_days: int = 30
     min_geo_confidence: float = 0.4
+    map_ui_v2: bool = True
 
     admin_user: str = "admin"
     admin_password: str = "change-this"
