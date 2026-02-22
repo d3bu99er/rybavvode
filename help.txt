@@ -1,2 +1,46 @@
-Перезапуск джобы скрапинга:
+=== ПЕРЕЗАПУСК ДЖОБЫ СКРАПИНГА:
 docker compose exec app python -c "import asyncio; from app.main import scrape_job; asyncio.run(scrape_job())"
+
+=== ПРОВЕРИТЬ ОШИБКИ СКАЧИВАНИЯ ВЛОЖЕНИЙ НА ФОРУМЕ:
+docker compose logs app --since=20m 2>&1 | grep -Ei "did not establish an authenticated session|retry_after|Attachment download unauthorized"
+
+=== ОТРАЗИТЬ ПОПЫТКИ СКАЧИВАНИЯ:
+docker compose logs app --since=20m 2>&1 | grep -Ei "Fetched|scrap|sync|Attachment|Forum login|Failed processing"
+
+=== ПРОВЕРКА НАЛИЧИЯ ВАЛИДНОЙ КУКИ:
+docker compose exec -T app python - <<'PY'
+import asyncio
+from app.config import get_settings
+from app.services.forum_auth import ForumAuthService
+
+async def main():
+    s = get_settings()
+    a = ForumAuthService(
+        forum_root_url=s.forum_root_url,
+        forum_login_url=s.forum_login_url,
+        username=s.forum_username,
+        password=s.forum_password,
+        timeout_seconds=s.http_timeout_seconds,
+        user_agent="diag/1.0",
+        fallback_cookie=s.forum_session_cookie,
+        preferred_cookie_name=s.forum_session_cookie_name,
+    )
+    c = await a.ensure_cookie(force_refresh=True)
+    print("cookie_len:", len(c))
+    print("has_xf_user:", "xf_user=" in c)
+
+asyncio.run(main())
+PY
+
+=== ПРОВЕРКА КОЛИЧЕСТВА ПРОПУЩЕННЫХ НЕ СКАЧАННЫХ ВЛОЖЕНИЙ:
+docker compose exec -T app python - <<'PY'
+from sqlalchemy import select, func
+from app.database import SessionLocal
+from app.models import PostAttachment
+
+db = SessionLocal()
+total = db.scalar(select(func.count()).select_from(PostAttachment))
+missing = db.scalar(select(func.count()).select_from(PostAttachment).where(PostAttachment.local_rel_path.is_(None)))
+print("total:", total, "missing:", missing)
+db.close()
+PY

@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
@@ -140,6 +141,13 @@ def admin_attachments(
     q: str | None = None,
     only_missing: bool = False,
     limit: int = 300,
+    batch_posts: int | None = None,
+    batch_downloaded: int | None = None,
+    batch_checked: int | None = None,
+    cleanup_scanned: int | None = None,
+    cleanup_deleted_files: int | None = None,
+    cleanup_detached_rows: int | None = None,
+    cleanup_reclassified_rows: int | None = None,
     db: Session = Depends(get_db),
 ):
     if not _is_auth(request):
@@ -152,6 +160,13 @@ def admin_attachments(
             "rows": rows,
             "q": q or "",
             "only_missing": only_missing,
+            "batch_posts": batch_posts,
+            "batch_downloaded": batch_downloaded,
+            "batch_checked": batch_checked,
+            "cleanup_scanned": cleanup_scanned,
+            "cleanup_deleted_files": cleanup_deleted_files,
+            "cleanup_detached_rows": cleanup_detached_rows,
+            "cleanup_reclassified_rows": cleanup_reclassified_rows,
         },
     )
 
@@ -166,6 +181,50 @@ async def retry_post_attachments_handler(post_id: int, request: Request, db: Ses
     await sync_service.retry_post_attachments(db, post, force=False)
     db.commit()
     return RedirectResponse(url="/admin/attachments", status_code=303)
+
+
+@router.post("/attachments/retry-missing")
+async def retry_missing_attachments_handler(
+    request: Request,
+    posts_limit: int = Form(default=50),
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    processed_posts, downloaded, checked = await sync_service.retry_missing_attachments(db, posts_limit=posts_limit)
+    params = urlencode(
+        {
+            "only_missing": "true",
+            "batch_posts": processed_posts,
+            "batch_downloaded": downloaded,
+            "batch_checked": checked,
+        }
+    )
+    return RedirectResponse(url=f"/admin/attachments?{params}", status_code=303)
+
+
+@router.post("/attachments/cleanup-non-image")
+def cleanup_non_image_attachments_handler(
+    request: Request,
+    rows_limit: int = Form(default=1000),
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    scanned, deleted_files, detached_rows, reclassified_rows = sync_service.cleanup_non_image_attachments(
+        db, limit=rows_limit
+    )
+    db.commit()
+    params = urlencode(
+        {
+            "only_missing": "false",
+            "cleanup_scanned": scanned,
+            "cleanup_deleted_files": deleted_files,
+            "cleanup_detached_rows": detached_rows,
+            "cleanup_reclassified_rows": reclassified_rows,
+        }
+    )
+    return RedirectResponse(url=f"/admin/attachments?{params}", status_code=303)
 
 
 @router.post("/topics/{topic_id}/coords")

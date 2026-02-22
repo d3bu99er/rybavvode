@@ -168,8 +168,11 @@ class ForumScraper:
 
     @staticmethod
     def _is_image_filename(name: str) -> bool:
-        ext = Path(name.lower()).suffix
-        return ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+        lowered = (name or "").strip().lower()
+        ext = Path(lowered).suffix
+        if ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
+            return True
+        return bool(re.search(r"(?:^|[-_.])(jpg|jpeg|png|gif|webp|bmp)(?:[.-]\d+)?$", lowered))
 
     def extract_attachments(self, message, page_url: str) -> list[ScrapedAttachment]:
         seen: set[str] = set()

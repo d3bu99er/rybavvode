@@ -5,16 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fishing Map MVP</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    .controls { padding: 12px; border-bottom: 1px solid #ddd; }
-    .controls form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .map-wrap { padding: 8px; }
-    input, select, button { padding: 6px; }
+    :root {
+      --bg: #f3f4f6;
+      --panel: #ffffff;
+      --line: #d6dde6;
+      --text: #111827;
+      --muted: #4b5563;
+      --accent: #0f766e;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+    .controls {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stats {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .switch {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .switch a {
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 13px;
+      color: #1f2937;
+      background: #fff;
+    }
+    .switch a.active {
+      border-color: var(--accent);
+      color: #0f766e;
+      background: #ecfdf5;
+      font-weight: 700;
+    }
+    .map-wrap {
+      flex: 1;
+      min-height: 420px;
+      padding: 0;
+    }
+    .map-wrap > div {
+      width: 100%;
+      height: 100%;
+    }
+    .map-wrap iframe {
+      width: 100% !important;
+      height: 100% !important;
+      border: 0;
+      display: block;
+    }
+    @media (max-width: 900px) {
+      .controls {
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .map-wrap {
+        min-height: 58vh;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="controls">
-    <div>Платных водоёмов на карте: {{ topics_count }} | Всего сообщений с водоёмов: {{ posts_count }}</div>
+    <div class="stats">
+      <span class="chip">Водоёмов: {{ topics_count }}</span>
+      <span class="chip">Сообщений: {{ posts_count }}</span>
+      <span class="chip">Период: {{ period }}</span>
+    </div>
+    <div class="switch">
+      <a href="/?period={{ period }}&q={{ q }}&limit={{ limit }}&ui=v2" class="{% if ui_mode == 'v2' %}active{% endif %}">Новый вид</a>
+      <a href="/?period={{ period }}&q={{ q }}&limit={{ limit }}&ui=legacy" class="{% if ui_mode == 'legacy' %}active{% endif %}">Legacy</a>
+    </div>
   </div>
   <div class="map-wrap">{{ map_html|safe }}</div>
 </body>

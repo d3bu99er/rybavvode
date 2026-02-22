@@ -84,7 +84,7 @@ def upsert_post_attachment(
     ).scalar_one_or_none()
     if attachment:
         attachment.file_name = file_name
-        attachment.is_image = is_image
+        attachment.is_image = attachment.is_image or is_image
         if local_rel_path is not None:
             attachment.local_rel_path = local_rel_path
         if mime_type is not None:
@@ -123,7 +123,7 @@ def list_attachments(
         .order_by(Post.posted_at_utc.desc())
     )
     if only_missing:
-        stmt = stmt.where(PostAttachment.local_rel_path.is_(None))
+        stmt = stmt.where(PostAttachment.local_rel_path.is_(None), PostAttachment.is_image.is_(True))
     if q:
         like = f"%{q}%"
         stmt = stmt.where(
@@ -317,3 +317,41 @@ def count_posts_for_map(
         like = f"%{q}%"
         stmt = stmt.where(or_(Post.content_text.ilike(like), Post.author.ilike(like), Topic.title.ilike(like)))
     return int(db.execute(stmt).scalar_one())
+
+
+def topic_activity_for_map(
+    db: Session,
+    since: datetime | None,
+    q: str | None,
+    limit: int,
+    min_geo_confidence: float,
+):
+    stmt: Select = (
+        select(
+            Topic,
+            func.count(Post.id).label("posts_count"),
+            func.max(Post.posted_at_utc).label("last_post_at"),
+        )
+        .join(Post, Post.topic_id == Topic.id)
+        .where(Post.is_deleted.is_(False))
+        .where(Topic.geocoded_lat.is_not(None), Topic.geocoded_lon.is_not(None))
+        .where(func.coalesce(Topic.geocode_confidence, 0.0) >= min_geo_confidence)
+    )
+    if since:
+        stmt = stmt.where(Post.posted_at_utc >= since)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Post.content_text.ilike(like),
+                Post.author.ilike(like),
+                Topic.title.ilike(like),
+                Topic.place_name.ilike(like),
+            )
+        )
+    stmt = (
+        stmt.group_by(Topic.id)
+        .order_by(func.max(Post.posted_at_utc).desc())
+        .limit(limit)
+    )
+    return db.execute(stmt).all()

@@ -20,6 +20,20 @@
     <label><input type="checkbox" name="only_missing" value="true" {% if only_missing %}checked{% endif %}/> Только не скачанные</label>
     <button type="submit">Фильтр</button>
   </form>
+  <form method="post" action="/admin/attachments/retry-missing" style="margin-top: 8px; margin-bottom: 12px;">
+    <label>Retry missing for posts: <input type="number" name="posts_limit" min="1" max="1000" value="50" /></label>
+    <button type="submit">Run batch retry</button>
+  </form>
+  {% if batch_posts is not none %}
+  <p>Batch retry result: posts={{ batch_posts }}, downloaded={{ batch_downloaded }}, checked={{ batch_checked }}</p>
+  {% endif %}
+  <form method="post" action="/admin/attachments/cleanup-non-image" style="margin-top: 8px; margin-bottom: 12px;">
+    <label>Cleanup non-image rows: <input type="number" name="rows_limit" min="1" max="20000" value="1000" /></label>
+    <button type="submit">Run cleanup</button>
+  </form>
+  {% if cleanup_scanned is not none %}
+  <p>Cleanup result: scanned={{ cleanup_scanned }}, deleted_files={{ cleanup_deleted_files }}, detached_rows={{ cleanup_detached_rows }}, reclassified_rows={{ cleanup_reclassified_rows }}</p>
+  {% endif %}
   <table>
     <thead>
       <tr>
