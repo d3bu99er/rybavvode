@@ -44,3 +44,6 @@ missing = db.scalar(select(func.count()).select_from(PostAttachment).where(PostA
 print("total:", total, "missing:", missing)
 db.close()
 PY
+
+=== ПРОВЕРКА КОГДА БЫЛО СПАРШЕНО ПОСЛЕДНЕЕ СООБЩЕНИЕ
+docker compose exec db psql -U postgres -d fishingmap -c "select now() as now_utc, max(posted_at_utc) as last_post_utc, count(*) filter (where posted_at_utc > now() - interval '24 hours') as posts_24h from posts;"
