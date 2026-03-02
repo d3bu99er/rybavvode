@@ -3,7 +3,8 @@ import logging
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -20,7 +21,18 @@ settings = get_settings()
 app = FastAPI(title="Fishing Map MVP")
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, https_only=False, same_site="lax")
 Path(settings.attachments_dir).mkdir(parents=True, exist_ok=True)
+static_dir = Path("app/static")
+static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/media/attachments", StaticFiles(directory=settings.attachments_dir), name="attachments")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    favicon_path = static_dir / "favicon.ico"
+    if not favicon_path.exists():
+        raise HTTPException(status_code=404, detail="Favicon not found")
+    return FileResponse(favicon_path)
 
 app.include_router(public_router)
 app.include_router(admin_router)

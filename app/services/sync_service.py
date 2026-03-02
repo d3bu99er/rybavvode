@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -361,11 +361,21 @@ class SyncService:
             )
         return scanned, deleted_files, detached_rows, reclassified_rows
 
-    def geocode_expired(self, topic: Topic) -> bool:
-        if topic.geocoded_lat is None or topic.geocoded_lon is None or topic.geocode_updated_at is None:
-            return True
-        ttl = timedelta(days=self.settings.geocode_ttl_days)
-        return topic.geocode_updated_at < datetime.now(UTC) - ttl
+    async def geocode_topic(self, db: Session, topic: Topic) -> str:
+        if (topic.geocode_provider or "").lower() == "manual":
+            return "skipped_manual"
+        if not topic.place_name:
+            return "skipped_empty_place"
+        geo = await self.geocoding.geocode(topic.place_name)
+        if not geo:
+            return "not_found"
+        topic.geocoded_lat = geo.lat
+        topic.geocoded_lon = geo.lon
+        topic.geocode_provider = geo.provider
+        topic.geocode_confidence = geo.confidence
+        topic.geocode_updated_at = datetime.now(UTC)
+        db.flush()
+        return "updated"
 
     async def run(self, db: Session):
         await self._ensure_forum_cookie(force_refresh=False)
@@ -456,14 +466,6 @@ class SyncService:
                                     db_attachment.is_image = True
                         if abs_path.exists():
                             db_attachment.local_rel_path = rel_path
-                if self.geocode_expired(topic):
-                    geo = await self.geocoding.geocode(topic.place_name)
-                    if geo:
-                        topic.geocoded_lat = geo.lat
-                        topic.geocoded_lon = geo.lon
-                        topic.geocode_provider = geo.provider
-                        topic.geocode_confidence = geo.confidence
-                        topic.geocode_updated_at = datetime.now(UTC)
                 db.commit()
             except Exception:
                 db.rollback()

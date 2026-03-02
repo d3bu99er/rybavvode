@@ -150,6 +150,9 @@ def _panel_assets() -> str:
         opacity: .5;
         cursor: not-allowed;
       }
+      .leaflet-attribution-flag {
+        display: none !important;
+      }
     </style>
     <div id="topic-panel">
       <div id="topic-panel-header">
@@ -600,6 +603,9 @@ def _v2_assets(points_json: str, map_var: str, cluster_var: str) -> str:
         display: block;
         font-weight: 700;
         margin: 2px 0 6px;
+      }
+      .leaflet-attribution-flag {
+        display: none !important;
       }
       #topic-view {
         position: fixed;

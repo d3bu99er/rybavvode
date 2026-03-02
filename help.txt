@@ -47,3 +47,48 @@ PY
 
 === ПРОВЕРКА КОГДА БЫЛО СПАРШЕНО ПОСЛЕДНЕЕ СООБЩЕНИЕ
 docker compose exec db psql -U postgres -d fishingmap -c "select now() as now_utc, max(posted_at_utc) as last_post_utc, count(*) filter (where posted_at_utc > now() - interval '24 hours') as posts_24h from posts;"
+
+=== ПРОВЕРКА РАЗМЕРА СКАЧАННЫХ ВЛОЖЕНИЙ
+docker compose exec app sh -lc 'du -sh "${ATTACHMENTS_DIR:-data/attachments}"'
+
+=== ЧТО ЗАНИМАЕТ МЕСТО?
+
+#1) Общая картина по диску (топ папок на корне)
+sudo du -xhd1 / | sort -h
+
+#2) Что занимает место в проекте
+cd /path/to/rybavvode
+du -h --max-depth=2 . | sort -h | tail -n 50
+
+#3) Что занимает Docker (образы/контейнеры/volumes/cache)
+docker system df -v
+
+#4) Размер volume с Postgres (обычно ..._pg_data)
+PG_VOL=$(docker volume ls --format '{{.Name}}' | grep 'pg_data' | head -n1)
+echo "PG_VOL=$PG_VOL"
+sudo du -sh "$(docker volume inspect "$PG_VOL" -f '{{.Mountpoint}}')"
+
+#5) Размер самой БД и крупнейших таблиц
+docker compose exec db psql -U postgres -d fishingmap -c "SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size;"
+docker compose exec db psql -U postgres -d fishingmap -c "SELECT relname AS table_name, pg_size_pretty(pg_total_relation_size(relid)) AS total_size FROM pg_catalog.pg_statio_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 20;"
+docker compose exec db psql -U postgres -d fishingmap -c "SELECT pg_size_pretty(SUM(size)) AS wal_size FROM pg_ls_waldir();"
+
+#6) Самые большие docker-логи контейнеров
+sudo find /var/lib/docker/containers -name '*-json.log' -printf '%10s %p\n' | sort -nr | head -n 20
+
+#7) Системные логи
+sudo du -sh /var/log/* 2>/dev/null | sort -h
+
+==== ПОЧИСТИТЬ НЕНУЖНЫЕ ДОКЕР ОБРАЗЫ И ПРОЧЕЕ ГОВНО
+# 1) Очистить build cache (самое важное в вашем случае)
+docker builder prune -a -f
+
+# 2) Удалить неиспользуемые образы
+docker image prune -a -f
+
+# 3) Дополнительно: остановленные контейнеры и лишние сети
+docker container prune -f
+docker network prune -f
+
+# 4) Проверить итог
+docker system df

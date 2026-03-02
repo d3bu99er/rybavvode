@@ -11,6 +11,7 @@ from app.models import Post
 from app.security import SESSION_KEY, verify_admin_credentials
 from app.services.repository import (
     get_post,
+    get_topic,
     list_attachments,
     list_posts,
     list_topics,
@@ -120,6 +121,8 @@ def admin_topics(
     request: Request,
     q: str | None = None,
     limit: int = 200,
+    geocode_status: str | None = None,
+    geocode_topic_id: int | None = None,
     db: Session = Depends(get_db),
 ):
     if not _is_auth(request):
@@ -131,6 +134,8 @@ def admin_topics(
             "request": request,
             "topics": topics,
             "q": q or "",
+            "geocode_status": geocode_status or "",
+            "geocode_topic_id": geocode_topic_id,
         },
     )
 
@@ -244,6 +249,25 @@ def update_topic_coords_handler(
     if update_topic_coordinates(db, topic_id, lat=lat, lon=lon, confidence=conf, provider="manual"):
         db.commit()
     return RedirectResponse(url="/admin/topics", status_code=303)
+
+
+@router.post("/topics/{topic_id}/geocode")
+async def geocode_topic_handler(
+    topic_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not _is_auth(request):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    topic = get_topic(db, topic_id)
+    if not topic:
+        params = urlencode({"geocode_status": "topic_not_found", "geocode_topic_id": topic_id})
+        return RedirectResponse(url=f"/admin/topics?{params}", status_code=303)
+    geocode_status = await sync_service.geocode_topic(db, topic)
+    if geocode_status == "updated":
+        db.commit()
+    params = urlencode({"geocode_status": geocode_status, "geocode_topic_id": topic_id})
+    return RedirectResponse(url=f"/admin/topics?{params}", status_code=303)
 
 
 @router.post("/posts/{post_id}/delete")
